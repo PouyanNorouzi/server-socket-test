@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { io } from 'socket.io-client';
 
 // ✅ Connect to the Express WebSocket server
@@ -7,33 +7,98 @@ const socket = io('http://localhost:3000');
 
 const lobbyID = ref('');
 const username = ref('');
+const password = ref('');
 const players = ref([]);
 const lobbyJoined = ref(false);
 const errorMessage = ref('');
 const loggedIn = ref(false);
+const userID = ref('');
 
 // ✅ Function to create a new lobby
 const createLobby = () => {
-    if (!lobbyID.value) return;
-    socket.emit('createLobby', lobbyID.value);
+    if (!lobbyID.value || !loggedIn.value) return;
+    socket.emit('createLobby', lobbyID.value, userID.value);
 };
 
 // ✅ Function to join an existing lobby
 const joinLobby = () => {
     if (!lobbyID.value || !loggedIn.value) return;
-    socket.emit('joinLobby', lobbyID.value);
+    socket.emit('joinLobby', lobbyID.value, userID.value);
 };
 
-const login = () => {
-    if (!username.value) return;
-    socket.emit('login', username.value);
-    loggedIn.value = true;
+// ✅ Function to leave the current lobby
+const leaveLobby = () => {
+    socket.emit('leaveLobby', lobbyID.value, userID.value);
+    lobbyJoined.value = false;
+    players.value = [];
+};
+
+const login = async () => {
+    if (!username.value || !password.value) return;
+
+    try {
+        const result = await fetch('http://localhost:3000/api/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                username: username.value,
+                password: password.value,
+            }),
+        });
+        const data = await result.json();
+        if (data.success) {
+            loggedIn.value = true;
+            userID.value = data.userID;
+
+            socket.emit('login', userID.value);
+        } else {
+            console.log('Login failed', data.error);
+        }
+    } catch (error) {
+        console.log(error);
+    }
+};
+
+const signup = async () => {
+    if (!username.value | !password.value) return;
+
+    try {
+        const result = await fetch('http://localhost:3000/api/signup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                username: username.value,
+                password: password.value,
+            }),
+        });
+        const data = await result.json();
+        if (data.success) {
+            loggedIn.value = true;
+            userID.value = data.userID;
+
+            socket.emit('login', userID.value);
+        } else {
+            console.log('Signup failed');
+        }
+    } catch (error) {
+        console.log(error);
+    }
 };
 
 // ✅ Listen for lobby updates
 onMounted(() => {
-    socket.on('updateLobby', (lobby) => {
-        players.value = lobby.players;
+    //TODO: think about it
+    document.addEventListener('beforeunload', () => {
+        socket.emit('leavelobby', lobbyID.value);
+    });
+
+    socket.on('updateLobby', (newPlayers) => {
+        console.log('updateLobby', players);
+        players.value = newPlayers;
         lobbyJoined.value = true;
         errorMessage.value = '';
     });
@@ -45,31 +110,40 @@ onMounted(() => {
     socket.on('lobbyFull', () => {
         errorMessage.value = 'Lobby is full!';
     });
+
+    socket.on('lobbyError', (error) => {
+        console.log(error);
+    });
 });
 </script>
 
 <template>
     <div class="flex flex-col items-center p-6">
         <h1 class="text-2xl font-bold mb-4">🎮 Lobby System</h1>
-        <input v-model="username" type="text" placeholder="Enter username" class="border p-2 rounded w-64" />
-        <button @click="login" class="bg-blue-500 text-white px-4 py-2 rounded">Login</button>
+        <div :hidden="loggedIn">
+            <input v-model="username" type="text" placeholder="Enter username" />
+            <input v-model="password" type="password" placeholder="Enter password" />
+            <button @click="login">Login</button>
+            <button @click="signup">Signup</button>
+        </div>
+        <div :hidden="!loggedIn">Logged in as {{ username }}</div>
 
         <div v-if="!lobbyJoined" class="flex flex-col gap-4">
-            <input v-model="lobbyID" type="text" placeholder="Enter Lobby ID" class="border p-2 rounded w-64" />
-            
-            <button @click="createLobby" class="bg-blue-500 text-white px-4 py-2 rounded">Create Lobby</button>
-            <button @click="joinLobby" class="bg-green-500 text-white px-4 py-2 rounded">Join Lobby</button>
-            
-            <p v-if="errorMessage" class="text-red-500">{{ errorMessage }}</p>
+            <input v-model="lobbyID" type="text" placeholder="Enter Lobby ID" />
+
+            <button @click="createLobby">Create Lobby</button>
+            <button @click="joinLobby">Join Lobby</button>
+
+            <p v-if="errorMessage">{{ errorMessage }}</p>
         </div>
 
         <div v-else>
-            <h2 class="text-lg font-semibold">Lobby: {{ lobbyID }}</h2>
-            <ul class="mt-2">
-                <li v-for="player in players" :key="player" class="text-gray-700">
-                    👤 {{ player }}
-                </li>
+            <h2>Lobby: {{ lobbyID }}</h2>
+            {{ players.length }} players in the lobby
+            <ul>
+                <li v-for="player in players" :key="player">👤 {{ player }}</li>
             </ul>
+            <button @click="leaveLobby">Leave Lobby</button>
         </div>
     </div>
 </template>
