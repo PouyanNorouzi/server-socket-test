@@ -1,13 +1,14 @@
 import { Db, MongoClient, ObjectId } from 'mongodb';
 import { hash, compare } from 'bcrypt';
 import dotenv from 'dotenv';
-import e from 'express';
 dotenv.config();
 
 const mongodb_host = process.env.MONGODB_HOST;
 const mongodb_user = process.env.MONGODB_USER;
 const mongodb_password = process.env.MONGODB_PASSWORD;
 const uri = `mongodb+srv://${mongodb_user}:${mongodb_password}@${mongodb_host}/`;
+
+const saltRounds = 10;
 
 export abstract class Database {
     abstract connect(): void;
@@ -43,7 +44,7 @@ export class MongoDatabase extends Database {
             throw new Error('Username already exists');
         }
 
-        const hashedPassword = await hash(password, 10);
+        const hashedPassword = await hash(password, saltRounds);
         const result = await this.userCollection.insertOne({
             username,
             hashedPassword,
@@ -163,6 +164,7 @@ export class MongoDatabase extends Database {
 
         if (lobby.members.length === 0) {
             await this.lobbiesCollection.deleteOne({ lobbyId });
+            console.log('Deleted lobby:', lobbyId);
         }
     }
 
@@ -184,8 +186,6 @@ export class MongoDatabase extends Database {
                 memberUsernames.push(user.username);
             }
         }
-
-        console.log(memberUsernames);
 
         return memberUsernames;
     }

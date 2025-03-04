@@ -13,19 +13,29 @@ const client = new MongoClient(atlasURI);
 
 const lobbiesDB = client.db('socket-test').collection('lobbies');
 
-export class socketConnection {
+export class SocketConnection {
     socket: Socket;
     io: Server;
     db: Database;
+    userID: string | null;
     constructor(socket: Socket, io: Server, db: Database) {
         this.io = io;
         this.socket = socket;
         this.db = db;
+        this.userID = null;
     }
 
-    async createLobby(lobbyId: string, host: string) {
+    setUserID(userID: string) {
+        this.userID = userID;
+    }
+
+    async createLobby(lobbyId: string) {
+        if (!this.userID) {
+            throw new Error('User not authenticated');
+        }
+
         try {
-            await this.db.createLobby(lobbyId, host);
+            await this.db.createLobby(lobbyId, this.userID);
             await this.socket.join(lobbyId);
             await this.updateLobbyMembers(lobbyId);
         } catch (error: any) {
@@ -34,9 +44,13 @@ export class socketConnection {
         }
     }
 
-    async joinLobby(lobbyId: string, host: string) {
+    async joinLobby(lobbyId: string) {
+        if (!this.userID) {
+            throw new Error('User not authenticated');
+        }
+
         try {
-            await this.db.joinLobby(lobbyId, host);
+            await this.db.joinLobby(lobbyId, this.userID);
             await this.socket.join(lobbyId);
             await this.updateLobbyMembers(lobbyId);
         } catch (error: any) {
@@ -45,9 +59,13 @@ export class socketConnection {
         }
     }
 
-    async leaveLobby(lobbyId: string, userID: string) {
+    async leaveLobby(lobbyId: string) {
+        if (!this.userID) {
+            throw new Error('User not authenticated');
+        }
+
         try {
-            await this.db.leaveLobby(lobbyId, userID);
+            await this.db.leaveLobby(lobbyId, this.userID);
             await this.socket.leave(lobbyId);
             await this.updateLobbyMembers(lobbyId);
         } catch (error: any) {
@@ -56,11 +74,14 @@ export class socketConnection {
         }
     }
 
-    async disconnectUser(userID: string) {
-        const user = await this.db.getUser(userID);
+    async disconnectUser() {
+        if (!this.userID) {
+            return;
+        }
+        const user = await this.db.getUser(this.userID);
 
         if (user.lobbyId) {
-            await this.db.leaveLobby(user.lobbyId, userID);
+            await this.db.leaveLobby(user.lobbyId, this.userID);
         }
     }
 

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted } from 'vue';
 import { io } from 'socket.io-client';
 
 // ✅ Connect to the Express WebSocket server
@@ -12,23 +12,22 @@ const players = ref([]);
 const lobbyJoined = ref(false);
 const errorMessage = ref('');
 const loggedIn = ref(false);
-const userID = ref('');
 
 // ✅ Function to create a new lobby
 const createLobby = () => {
     if (!lobbyID.value || !loggedIn.value) return;
-    socket.emit('createLobby', lobbyID.value, userID.value);
+    socket.emit('createLobby', lobbyID.value);
 };
 
 // ✅ Function to join an existing lobby
 const joinLobby = () => {
     if (!lobbyID.value || !loggedIn.value) return;
-    socket.emit('joinLobby', lobbyID.value, userID.value);
+    socket.emit('joinLobby', lobbyID.value);
 };
 
 // ✅ Function to leave the current lobby
 const leaveLobby = () => {
-    socket.emit('leaveLobby', lobbyID.value, userID.value);
+    socket.emit('leaveLobby', lobbyID.value);
     lobbyJoined.value = false;
     players.value = [];
 };
@@ -50,9 +49,11 @@ const login = async () => {
         const data = await result.json();
         if (data.success) {
             loggedIn.value = true;
-            userID.value = data.userID;
+            const { userID, username, token } = data;
 
-            socket.emit('login', userID.value);
+            localStorage.setItem('token', token);
+            username.value = username;
+            socket.emit('login', userID);
         } else {
             console.log('Login failed', data.error);
         }
@@ -78,11 +79,37 @@ const signup = async () => {
         const data = await result.json();
         if (data.success) {
             loggedIn.value = true;
-            userID.value = data.userID;
+            const { userID, username, token } = data;
 
-            socket.emit('login', userID.value);
+            localStorage.setItem('token', token);
+            username.value = username;
+            socket.emit('login', userID);
         } else {
             console.log('Signup failed');
+        }
+    } catch (error) {
+        console.log(error);
+    }
+};
+
+const refreshLogin = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+        const result = await fetch('http://localhost:3000/api/refreshlogin', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        });
+        const data = await result.json();
+        if (data.success) {
+            loggedIn.value = true;
+            username.value = data.username;
+            socket.emit('login', data.userID);
+        } else {
+            console.log('User not logged in');
         }
     } catch (error) {
         console.log(error);
@@ -112,14 +139,16 @@ onMounted(() => {
     });
 
     socket.on('lobbyError', (error) => {
-        console.log(error);
+        errorMessage.value = error;
     });
+
+    refreshLogin();
 });
 </script>
 
 <template>
-    <div class="flex flex-col items-center p-6">
-        <h1 class="text-2xl font-bold mb-4">🎮 Lobby System</h1>
+    <div>
+        <h1>🎮 Lobby System</h1>
         <div :hidden="loggedIn">
             <input v-model="username" type="text" placeholder="Enter username" />
             <input v-model="password" type="password" placeholder="Enter password" />
