@@ -1,17 +1,7 @@
-import { MongoClient } from 'mongodb';
 import dotenv from 'dotenv';
 import { Server, Socket } from 'socket.io';
 import { Database } from './database.ts';
 dotenv.config();
-
-const mongodb_host = process.env.MONGODB_HOST;
-const mongodb_user = process.env.MONGODB_USER;
-const mongodb_password = process.env.MONGODB_PASSWORD;
-const atlasURI = `mongodb+srv://${mongodb_user}:${mongodb_password}@${mongodb_host}/`;
-
-const client = new MongoClient(atlasURI);
-
-const lobbiesDB = client.db('socket-test').collection('lobbies');
 
 export class SocketConnection {
     socket: Socket;
@@ -86,12 +76,13 @@ export class SocketConnection {
     }
 
     async updateLobby(lobbyId: string) {
-        const lobby = await lobbiesDB.findOne({ lobbyId });
-        if (!lobby) {
-            throw new Error('Lobby not found');
+        try {
+            const lobby = await this.db.getLobby(lobbyId);
+            this.io.to(lobbyId).emit('updateLobby', lobby.members);
+        } catch (error: any) {
+            this.socket.emit('lobbyError', error.message);
+            return;
         }
-
-        this.io.to(lobbyId).emit('updateLobby', lobby.members);
     }
 
     private async updateLobbyMembers(lobbyId: string) {

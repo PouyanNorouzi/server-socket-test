@@ -1,4 +1,4 @@
-import { Db, MongoClient, ObjectId } from 'mongodb';
+import { Db, MongoClient, ObjectId, WithId } from 'mongodb';
 import { hash, compare } from 'bcrypt';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -18,6 +18,7 @@ export abstract class Database {
     abstract createLobby(lobbyId: string, host: string): Promise<void>;
     abstract joinLobby(lobbyId: string, userId: string): Promise<void>;
     abstract leaveLobby(lobbyId: string, userId: string): Promise<void>;
+    abstract getLobby(lobbyId: string): Promise<any>;
     abstract getLobbyMembers(lobbyId: string): Promise<string[]>;
 }
 
@@ -166,6 +167,15 @@ export class MongoDatabase extends Database {
             await this.lobbiesCollection.deleteOne({ lobbyId });
             console.log('Deleted lobby:', lobbyId);
         }
+    }
+
+    async getLobby(lobbyId: string): Promise<WithId<any>> {
+        const lobby = await this.lobbiesCollection.findOne({ lobbyId });
+        if (!lobby) {
+            throw new Error('Lobby not found');
+        }
+
+        return lobby;
     }
 
     async getLobbyMembers(lobbyId: string): Promise<string[]> {

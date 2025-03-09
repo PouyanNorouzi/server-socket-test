@@ -116,6 +116,12 @@ const refreshLogin = async () => {
     }
 };
 
+const logout = () => {
+    localStorage.removeItem('token');
+    loggedIn.value = false;
+    socket.emit('logout');
+};
+
 // ✅ Listen for lobby updates
 onMounted(() => {
     //TODO: think about it
@@ -155,7 +161,10 @@ onMounted(() => {
             <button @click="login">Login</button>
             <button @click="signup">Signup</button>
         </div>
-        <div :hidden="!loggedIn">Logged in as {{ username }}</div>
+        <div :hidden="!loggedIn">
+            Logged in as {{ username }}
+            <button @click="logout">Logouts</button>
+        </div>
 
         <div v-if="!lobbyJoined" class="flex flex-col gap-4">
             <input v-model="lobbyID" type="text" placeholder="Enter Lobby ID" />
